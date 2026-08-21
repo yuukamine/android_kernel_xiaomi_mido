@@ -205,7 +205,6 @@ jobs:
             OBJSIZE=llvm-size
             LLVM=1
             LLVM_IAS=1
-            LOCALVERSION="-perf"
             KBUILD_BUILD_USER=yuukamine
             KBUILD_BUILD_HOST=Azure
             LOCALVERSION=-perf
