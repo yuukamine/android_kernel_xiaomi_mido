@@ -1,0 +1,370 @@
+name: Dasvidania 4.9
+
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        required: false
+        default: 'mido_defconfig'
+      lto_mode:
+        description: 'Mode LTO (thin/full/none)'
+        required: false
+        default: 'thin'
+        type: choice
+        options:
+          - thin
+          - full
+          - none
+      artifact_scope:
+        description: 'Uploaded artifact'
+        required: false
+        default: 'zip'
+        type: choice
+        options:
+          - zip
+          - kernel_only
+          - all_files
+      include_ksu:
+        description: 'Include KernelSU backslashxx'
+        required: false
+        default: false # Default is not included
+        type: boolean
+      for_release: 
+        description: 'Release build (Turn off Modversion & Commit Hash on name)'
+        required: false
+        default: false
+        type: boolean
+  # Disable build on push since we're using workspace dispatch
+  # push:
+    # branches:
+      # - master
+
+env:
+  TZ: Asia/Jakarta
+  KERNEL_DIR: ${{ github.workspace }}/kernel
+  TC_DIR: ${{ github.workspace }}/toolchain/clang-llvm
+  OUT_DIR: ${{ github.workspace }}/kernel/out
+  AOSP_CLANG_TAG: 16
+  AOSP_CLANG_URL: https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v6
+        with:
+          path: kernel
+      - name: Check available diskspace
+        run: df -h /
+      - name: Setup swapmem
+        run: |
+          LTO_MODE="${{ github.event.inputs.lto_mode || 'thin' }}"
+
+          if [ "$LTO_MODE" = "full" ]; then
+            SWAP_SIZE="8G"
+          else
+            SWAP_SIZE="4G"
+          fi
+
+          echo "Menambahkan swap ${SWAP_SIZE} (mode LTO: ${LTO_MODE})..."
+          sudo fallocate -l "$SWAP_SIZE" /swapfile_ci
+          sudo chmod 600 /swapfile_ci
+          sudo mkswap /swapfile_ci
+          sudo swapon /swapfile_ci
+          free -h
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison flex libssl-dev libelf-dev \
+            build-essential zip curl git python3 \
+            python-is-python3 ccache llvm lld \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+      - name: Cache AOSP Clang toolchain
+        id: cache-toolchain
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.TC_DIR }}
+          key: clang-llvm-${{ env.AOSP_CLANG_TAG }}
+
+      - name: Download AOSP Clang toolchain from AOSPA fork
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          git clone "$AOSP_CLANG_URL" -b "$AOSP_CLANG_TAG" "$TC_DIR" --depth=1 --no-tags \
+          --single-branch
+      - name: Ccache setup
+        uses: actions/cache@v5
+        with:
+          path: ~/.ccache
+          key: ccache-${{ github.event.inputs.defconfig || 'mido_defconfig' }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ github.event.inputs.defconfig || 'mido_defconfig' }}-
+
+      - name: Setup ccache
+        run: |
+          export CCACHE_DIR=~/.ccache
+          ccache -M 5G
+          ccache -z
+  
+      - name: Setup toolchain PATH
+        run: echo "$TC_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain info
+        run: |
+          which clang
+          clang --version
+      # - name: Setup artifact name
+        # id: meta
+        # if: always()
+        # run: |
+          # BRANCH_NAME="${{ github.ref_name }}"
+          # BRANCH_SAFE="${BRANCH_NAME//\//-}"
+          # TANGGAL=$(date +'%d%m%Y')
+          # echo "artifact_name=kernel-4.9-${BRANCH_SAFE}-${{ github.run_number }}-${TANGGAL}" >> "$GITHUB_OUTPUT"
+      - name: Setup artifact name
+        id: meta
+        if: always()
+        run: |
+          # 1. Cek status centang KernelSU secara dinamis
+          if [ "${{ github.event.inputs.include_ksu }}" = "true" ]; then
+            KSU_STATUS="ksu"
+          else
+            KSU_STATUS=""
+          fi
+
+          TANGGAL=$(date +'%d%m%Y')
+          RUN_NUM="${{ github.run_number }}"
+
+
+          if [ -n "$KSU_STATUS" ]; then
+            FILE_NAME="dasvidanya-4.9-mido-${KSU_STATUS}-${RUN_NUM}-${TANGGAL}"
+          else
+            FILE_NAME="dasvidanya-4.9-mido-${RUN_NUM}-${TANGGAL}"
+          fi
+
+          echo "artifact_name=${FILE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Release Mode
+        if: ${{ github.event.inputs.for_release == 'true' }} 
+        run: |
+          cd "$KERNEL_DIR"
+          TARGET_DEF="${{ github.event.inputs.defconfig || 'mido_defconfig' }}"
+          TARGET_CONFIG="arch/arm64/configs/$TARGET_DEF"
+
+          echo "Turning off modversion.."
+          
+          # Turn off commit on localnames
+          sed -i '/CONFIG_LOCALVERSION/d' "$TARGET_CONFIG"
+          sed -i 's/CONFIG_MODVERSIONS=y/CONFIG_MODVERSIONS=n/g' "$TARGET_CONFIG"
+          sed -i 's/CONFIG_LOCALVERSION_AUTO/CONFIG_MODVERSIONS=n/g' "$TARGET_CONFIG"
+          sed -i 's/CONFIG_LOCALVERSION_AUTO=y/CONFIG_LOCALVERSION_AUTO=n/g' "$TARGET_CONFIG"
+
+      - name: Setup KernelSU by Backslashxx
+        if: ${{ github.event.inputs.include_ksu == 'true' }} 	  
+        run: |
+          cd "$KERNEL_DIR"
+          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
+          curl -LSs "https://raw.githubusercontent.com/xxblebleblexx/nomount-installer/refs/heads/installer/nomount.sh" | bash -s 4.9
+
+          echo "CONFIG_KSU=y" >> $KERNEL_DIR/arch/arm64/configs/mido_defconfig
+          
+          echo "CONFIG_KSU_TAMPER_SYSCALL_TABLE=y" >> $KERNEL_DIR/arch/arm64/configs/mido_defconfig
+          
+          echo "CONFIG_NOMOUNT=y" >> $KERNEL_DIR/arch/arm64/configs/mido_defconfig
+
+      - name: Build kernel
+        id: build
+        run: |
+          START_TIME=$(date +%s)
+
+          cd "$KERNEL_DIR"
+          touch .scmversion
+          make mrproper
+          mkdir -p "$OUT_DIR"
+
+          DEFCONFIG="${{ github.event.inputs.defconfig || 'mido_defconfig' }}"
+          LTO_MODE="${{ github.event.inputs.lto_mode || 'thin' }}"
+
+          CUSTOM_CFLAGS="-march=armv8-a -mno-outline"
+
+          TOOLCHAIN_ARGS=(
+            ARCH=arm64
+            CC="ccache clang"
+            HOSTCC="ccache clang"
+            HOSTCXX="ccache clang++"
+            LD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            STRIP=llvm-strip
+            READELF=llvm-readelf
+            OBJSIZE=llvm-size
+            LLVM=1
+            LLVM_IAS=1
+            KBUILD_BUILD_USER=yuukamine
+            KBUILD_BUILD_HOST=Azure
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+            KCFLAGS="$CUSTOM_CFLAGS"
+          )
+
+          if [ "$LTO_MODE" != "none" ]; then
+            TOOLCHAIN_ARGS+=(LTO="$LTO_MODE")
+          fi
+
+          if [ -n "${KBUILD_BUILD_TIMESTAMP:-}" ]; then
+            TOOLCHAIN_ARGS+=(KBUILD_BUILD_TIMESTAMP="$KBUILD_BUILD_TIMESTAMP")
+          fi
+
+          echo "=== Defconfig: $DEFCONFIG | LTO: $LTO_MODE ==="
+
+          LOG_FILE="${{ github.workspace }}/build.log"
+
+          make O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" "$DEFCONFIG" 2>&1 | tee "$LOG_FILE"
+          make -j"$(nproc --all)" O="$OUT_DIR" "${TOOLCHAIN_ARGS[@]}" 2>&1 | tee -a "$LOG_FILE"
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          ccache -s | tee -a "$LOG_FILE"
+
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          MIN=$((DURATION / 60))
+          SEC=$((DURATION % 60))
+
+          echo "-----------------------------------------------------"
+          echo "Compilation duration: ${MIN} minute ${SEC} seconds"
+          echo "-----------------------------------------------------"
+
+          # Simpan sebagai output step agar bisa dipakai di step summary/step lain
+          echo "duration_min=${MIN}" >> "$GITHUB_OUTPUT"
+          echo "duration_sec=${SEC}" >> "$GITHUB_OUTPUT"
+          echo "defconfig=${DEFCONFIG}" >> "$GITHUB_OUTPUT"
+          echo "lto_mode=${LTO_MODE}" >> "$GITHUB_OUTPUT"
+
+          exit "$BUILD_EXIT"
+      - name: Verify build output
+        run: |
+          if [ -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb" ] || [ -f "$OUT_DIR/arch/arm64/boot/Image.gz" ]; then
+            echo "BUILD BERHASIL"
+          else
+            echo "BUILD GAGAL - file Image.gz tidak ditemukan"
+            exit 1
+          fi          
+      - name: Pack into AnyKernel3
+        if: ${{ (github.event.inputs.artifact_scope || 'zip') == 'zip' }}
+        run: |
+          cd ${{ github.workspace }}
+          mkdir AnyKernel3 && cd AnyKernel3
+          git init
+          git remote add origin https://github.com/osm0sis/AnyKernel3
+          git fetch --depth 1 origin e4b1bb25ca2aabcfd57f694a5998d87130701b71
+          git checkout FETCH_HEAD
+          cat << 'EOF' > anykernel.sh
+          ### AnyKernel3 Ramdisk Mod Script
+          ## osm0sis @ xda-developers
+
+          ### AnyKernel3 setup
+          # global properties
+          properties() { '
+          kernel.string=Dasvidania Kernel for Redmi Note 4x
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=mido
+          supported.versions=
+          supported.patchlevels=
+          supported.vendorpatchlevels=
+          '; } # end properties
+
+          ### AnyKernel3 install
+          ## boot files attributes
+          boot_attributes() {
+          set_perm_recursive 0 0 755 644 $RAMDISK/*;
+          set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
+          } # end attributes
+
+          # boot shell variables
+          BLOCK=/dev/block/bootdevice/by-name/boot;
+          IS_SLOT_DEVICE=0;
+          RAMDISK_COMPRESSION=auto;
+          PATCH_VBMETA_FLAG=auto;
+
+          # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
+          . tools/ak3-core.sh;
+
+          # boot install
+          dump_boot;
+          
+          write_boot;
+          ## end boot install
+          EOF
+
+          # 3. Copy kernel build
+          TARGET_IMAGE="${{ env.OUT_DIR }}/arch/arm64/boot/Image.gz-dtb"
+          if [ ! -f "$TARGET_IMAGE" ]; then
+            TARGET_IMAGE="${{ env.OUT_DIR }}/arch/arm64/boot/Image.gz"
+          fi
+          cp "$TARGET_IMAGE" .
+
+          # 4. Pack into zip
+          ZIP_NAME="${{ steps.meta.outputs.artifact_name }}.zip"
+          zip -r9 "$ZIP_NAME" * -x .git\* README.md
+          echo "File ZIP berhasil dibuat di: $(pwd)/$ZIP_NAME"
+
+          # 5. Upload it
+          #mv "$ZIP_NAME" ${{ github.workspace }}/
+          #echo "ZIP_PATH=${{ github.workspace }}/$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload ZIP to GitHub Artifacts
+        if: ${{ (github.event.inputs.artifact_scope || 'zip') == 'zip' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: AnyKernel3/${{ steps.meta.outputs.artifact_name }}.zip
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+      - name: Upload kernel image (kernel_only - folder boot)
+        if: ${{ (github.event.inputs.artifact_scope || 'kernel_only') == 'kernel_only' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: ${{ env.OUT_DIR }}/arch/arm64/boot
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload kernel build (all_files includes out)
+        if: ${{ github.event.inputs.artifact_scope == 'all_files' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}-out
+          path: ${{ env.OUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload log build
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}-log
+          path: ${{ github.workspace }}/build.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "## Kernel build summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Defconfig | \`${{ steps.build.outputs.defconfig }}\` |"
+            echo "| LTO | \`${{ steps.build.outputs.lto_mode }}\` |"
+            echo "| Build time | **${{ steps.build.outputs.duration_min }} menit ${{ steps.build.outputs.duration_sec }} detik** |"
+            echo "| Status | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
