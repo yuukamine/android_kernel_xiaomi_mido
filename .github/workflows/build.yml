@@ -72,15 +72,15 @@ jobs:
           fi
 
           echo "Menambahkan swap ${SWAP_SIZE} (mode LTO: ${LTO_MODE})..."
-          sudo fallocate -l "$SWAP_SIZE" /swapfile_ci
-          sudo chmod 600 /swapfile_ci
-          sudo mkswap /swapfile_ci
-          sudo swapon /swapfile_ci
+          fallocate -l "$SWAP_SIZE" /swapfile_ci
+          chmod 600 /swapfile_ci
+          mkswap /swapfile_ci
+          swapon /swapfile_ci
           free -h
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          apt-get update
+          apt-get install -y \
             bc bison flex libssl-dev libelf-dev \
             build-essential zip curl git python3 \
             python-is-python3 ccache llvm lld \
