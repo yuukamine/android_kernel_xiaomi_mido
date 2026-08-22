@@ -1,4 +1,4 @@
-name: Dasvidania 4.9
+name: Dasvidania 4.9 13
 
 on:
   workflow_dispatch:
@@ -44,13 +44,15 @@ env:
   KERNEL_DIR: ${{ github.workspace }}/kernel
   TC_DIR: ${{ github.workspace }}/toolchain/clang-llvm
   OUT_DIR: ${{ github.workspace }}/kernel/out
-  AOSP_CLANG_TAG: 16
-  AOSP_CLANG_URL: https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone
+  AOSP_CLANG_TAG: master
+  AOSP_CLANG_URL: https://github.com/kdrag0n/proton-clang
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 350
+    container:
+      image: buildpack-deps:bullseye
 
     steps:
       - name: Checkout kernel source
@@ -192,25 +194,12 @@ jobs:
 
           TOOLCHAIN_ARGS=(
             ARCH=arm64
+            SUBARCH=arm64
             CC="ccache clang"
-            HOSTCC="ccache clang"
-            HOSTCXX="ccache clang++"
-            LD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            READELF=llvm-readelf
-            OBJSIZE=llvm-size
-            LLVM=1
-            LLVM_IAS=1
             KBUILD_BUILD_USER=yuukamine
             KBUILD_BUILD_HOST=Azure
-            CLANG_TRIPLE=aarch64-linux-gnu-
             CROSS_COMPILE=aarch64-linux-gnu-
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-            KCFLAGS="$CUSTOM_CFLAGS"
           )
 
           if [ "$LTO_MODE" != "none" ]; then
