@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 350
     container:
       image: buildpack-deps:bullseye
-
+      options: --cap-add=SYS_ADMIN --privileged
     steps:
       - name: Checkout kernel source
         uses: actions/checkout@v6
