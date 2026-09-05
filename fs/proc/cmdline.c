@@ -3,6 +3,11 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;
+extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
+#endif
+
 #include <asm/setup.h>
 #ifdef CONFIG_PROC_CMDLINE_APPEND_ANDROID_FSTAB_SUFFIX
 #include <linux/of.h>
@@ -67,6 +72,13 @@ static void proc_command_line_init(void) {
 static int cmdline_proc_show(struct seq_file *m, void *v)
 {
 	seq_puts(m, proc_command_line);
+#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+	if (static_branch_likely(&susfs_is_fake_cmdline_or_bootconfig_buffer_set)) {
+		susfs_spoof_cmdline_or_bootconfig(m);
+		seq_putc(m, '\n');
+		return 0;
+	}
+#endif
 	seq_putc(m, '\n');
 	return 0;
 }
