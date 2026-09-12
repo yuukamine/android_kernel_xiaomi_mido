@@ -61,6 +61,7 @@ jobs:
         with:
           path: kernel
           submodules: 'recursive'
+          fetch-depth: 0
       - name: Check available diskspace
         run: df -h /
       - name: Setup swapmem
