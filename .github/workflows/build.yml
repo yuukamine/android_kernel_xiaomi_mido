@@ -5,14 +5,14 @@ on:
     inputs:
       defconfig:
         required: false
-        default: 'vendor/msm8953_defconfig'
+        default: 'vendor/msm8953-perf_defconfig'
       fg_defconfig:
         required: false
         default: 'vendor/akari.config'
       lto_mode:
         description: 'Mode LTO (thin/full/none)'
         required: false
-        default: 'thin'
+        default: 'none'
         type: choice
         options:
           - thin
@@ -112,9 +112,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ccache
-          key: ccache-${{ github.event.inputs.defconfig || 'vendor/msm8953_defconfig' }}-${{ github.run_id }}
+          key: ccache-${{ github.event.inputs.defconfig || 'vendor/msm8953-perf_defconfig' }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ github.event.inputs.defconfig || 'vendor/msm8953_defconfig' }}-
+            ccache-${{ github.event.inputs.defconfig || 'vendor/msm8953-perf_defconfig' }}-
 
       - name: Setup ccache
         run: |
@@ -164,7 +164,7 @@ jobs:
         if: ${{ github.event.inputs.for_release == 'true' }} 
         run: |
           cd "$KERNEL_DIR"
-          TARGET_DEF="${{ github.event.inputs.defconfig || 'vendor/msm8953_defconfig' }}"
+          TARGET_DEF="${{ github.event.inputs.defconfig || 'vendor/msm8953-perf_defconfig' }}"
           TARGET_CONFIG="arch/arm64/configs/$TARGET_DEF"
 
           echo "Turning off modversion.."
@@ -182,11 +182,11 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
           curl -LSs "https://raw.githubusercontent.com/xxblebleblexx/nomount-installer/refs/heads/installer/nomount.sh" | bash -s 4.19
 
-          echo "CONFIG_KSU=y" >> $KERNEL_DIR/arch/arm64/configs/vendor/msm8953_defconfig
+          echo "CONFIG_KSU=y" >> $KERNEL_DIR/arch/arm64/configs/vendor/msm8953-perf_defconfig
           
-          echo "CONFIG_KSU_TAMPER_SYSCALL_TABLE=y" >> $KERNEL_DIR/arch/arm64/configs/vendor/msm8953_defconfig
+          echo "CONFIG_KSU_TAMPER_SYSCALL_TABLE=y" >> $KERNEL_DIR/arch/arm64/configs/vendor/msm8953-perf_defconfig
           
-          echo "CONFIG_NOMOUNT=y" >> $KERNEL_DIR/arch/arm64/configs/vendor/msm8953_defconfig
+          echo "CONFIG_NOMOUNT=y" >> $KERNEL_DIR/arch/arm64/configs/vendor/msm8953-perf_defconfig
 
       - name: Build kernel
         id: build
@@ -198,8 +198,8 @@ jobs:
           make mrproper
           mkdir -p "$OUT_DIR"
 
-          DEFCONFIG="${{ github.event.inputs.defconfig || 'vendor/msm8953_defconfig' }}"
-          FG_DEFCONFIG="${{ github.event.inputs.defconfig || 'vendor/akari.config' }}"
+          DEFCONFIG="${{ github.event.inputs.defconfig || 'vendor/msm8953-perf_defconfig' }}"
+          FG_DEFCONFIG="${{ github.event.inputs.fg_defconfig || 'vendor/akari.config' }}"
           LTO_MODE="${{ github.event.inputs.lto_mode || 'thin' }}"
 
           CUSTOM_CFLAGS="-march=armv8-a -mno-outline"
