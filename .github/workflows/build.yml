@@ -101,7 +101,7 @@ jobs:
           #git clone "$AOSP_CLANG_URL" -b "$AOSP_CLANG_TAG" "$TC_DIR" --depth=1 --no-tags \
           #--single-branch
       - name: Download AOSP Clang toolchain from AOSPA fork
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        #if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p $TC_DIR && cd $TC_DIR
           curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
