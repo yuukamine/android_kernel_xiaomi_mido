@@ -101,12 +101,12 @@ jobs:
       - name: Download AOSP Clang toolchain from AOSPA fork
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          mkdir -p $TC_DIR && cd $TC_DIR \
-          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman" \
-          chmod a+x antman \
-          ./antman -S \
-          ./antman --patch=glibc \
-          cd "$KERNEL_DIR" \
+          mkdir -p $TC_DIR && cd $TC_DIR
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+          chmod a+x antman
+          ./antman -S
+          ./antman --patch=glibc
+          cd "$KERNEL_DIR"
       - name: Ccache setup
         uses: actions/cache@v5
         with:
@@ -286,7 +286,7 @@ jobs:
           ### AnyKernel3 setup
           # global properties
           properties() { '
-          kernel.string=Dasvidania Kernel 4.19 for Redmi Note 4x
+          kernel.string=Dasvidania Kernel for Redmi Note 4x
           do.devicecheck=1
           do.modules=0
           do.systemless=1
