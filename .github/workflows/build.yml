@@ -220,10 +220,9 @@ jobs:
             OBJSIZE=llvm-size
             LLVM=1
             LLVM_IAS=1
-            LOCALVERSION="-perf"
+            LOCALVERSION="-LohYa😹"
             KBUILD_BUILD_USER=yuukamine
             KBUILD_BUILD_HOST=Azure
-            LOCALVERSION=-perf
             CLANG_TRIPLE=aarch64-linux-gnu-
             CROSS_COMPILE=aarch64-linux-gnu-
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
